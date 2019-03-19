@@ -44,20 +44,11 @@
             {   
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                // o.uv = v.texcoord;
-                // get vertex normal in world space
 				o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz); // , unity_ObjectToWorld));
-                // dot product between normal and light direction for
-                // standard diffuse (Lambert) lighting
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex);
                 
                 o.V = normalize(_WorldSpaceCameraPos - o.worldPos.xyz);
                 o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
-                // half nl = max (0, dot(N, _WorldSpaceLightPos0.xyz));
-                
-                // factor in the light color
-                 // o.diff = nl * _LightColor0;//  * wardSpec;
-                //o.diff = _LightColor0 * wardSpec;
                 return o;
             }
             
@@ -88,13 +79,10 @@
 						(1.0f + dot(H, N));
 					wardSpec = _LightColor0.rgb * _SpecularColor.rgb * sqrt(max(0.0, LN / dot(V, N))) * exp(exponent);
 				}
-                // sample texture
 				float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN);
 
 				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
 
-                // multiply by lighting
-                // col *= i.diff;
                 return col;
             }
             ENDCG
