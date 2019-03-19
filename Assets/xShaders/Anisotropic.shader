@@ -1,4 +1,4 @@
-﻿Shader "Lit/Simple Diffuse"
+﻿Shader "Custom/Anisotropic"
 {
     Properties
     {
