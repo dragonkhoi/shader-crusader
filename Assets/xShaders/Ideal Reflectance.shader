@@ -40,7 +40,7 @@
                 float3 T : TEXCOORD3;
             };
             
-            float shadowMasking (float v, float m)
+            float shadowMasking (half3 v, half3 m, half3 n)
             {
                 float G;
                 float dotVM = dot(v, m);
@@ -67,6 +67,7 @@
                     piecewise = 1.0;
                 }
                 G = chiPlus * piecewise;
+                return G;
             }
 
             v2f vert (appdata_full v)
@@ -88,7 +89,7 @@
                 float Nt = 1.5;
                 float Ni = 1.5;
                 float3 i = normalize(_WorldSpaceLightPos0.xyz); // light dir
-                float m = normalize(input.N);
+                float m = normalize(input.N); // TODO: microsurface normal
                 float c = dot(i,m);
                 float g = sqrt(max(0.0,(Nt * Nt) / (Ni * Ni) - 1 + c*c));
                 float F;
@@ -99,20 +100,21 @@
                 else {
                     0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
                 }
-                
-                float G = shadowMasking(i, m) * shadowMasking (o, m);
-                
+                half3 o = normalize(_WorldSpaceLightPos0.xyz); // light scattering TODO
+                float G = shadowMasking(i, m, input.N) * shadowMasking (o, m, input.N);
+                half3 n = normalize(input.N);
+                half3 ht = normalize(i + o); // TODO: check
                 float D = 1.0; // stefan here
-                float freflection = F * G * D / (4*length(dot(i, n))*length(dot(o,n)));
+                float freflection = F * G * D / (4*length(dot(i, input.N))*length(dot(o,input.N)));
                 float frefractionLead = (length(dot(i, ht)) * length(dot(o, ht))) / (length(dot(i, n)) * length(dot(o, n)));
                 float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
                 float bxdf = freflection + frefraction;
                 
                 half3 L = normalize(_WorldSpaceLightPos0.xyz); //  -i.worldPos);
-                half3 V = i.V;
+                half3 V = input.V;
                 half3 H = normalize(V + L);
-                half3 N = i.N;
-                half3 T = i.T;
+                half3 N = input.N;
+                half3 T = input.T;
                 half3 B = cross(N, T);
                 float LN = dot(L, N);
                 
