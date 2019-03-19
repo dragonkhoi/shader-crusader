@@ -6,6 +6,7 @@
         _SpecularColor("Specular Material Color", Color) = (1,1,1,1)
         _Ax("Roughness in brush's direction on surface", Float) = 1.0
         _Ay("Roughness orthogonal to brush's direction on surface", Float) = 1.0
+        _AlphaP("Exponent parameter for calculating microsurface normal", Float) = 1.0
     }
     SubShader
     {
@@ -18,6 +19,8 @@
             Tags {"LightMode"="ForwardBase"}
         
             CGPROGRAM
+// Upgrade NOTE: excluded shader from DX11 because it uses wrong array syntax (type[size] name)
+#pragma exclude_renderers d3d11
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
@@ -28,26 +31,39 @@
             uniform float4 _SpecularColor;
             uniform float _Ax;
             uniform float _Ay;
-
+            uniform float _AlphaP;
+            
             struct v2f
             {
-                //float2 uv : TEXCOORD0;
+                float2 uv : TEXCOORD0;
                 //  fixed4 diff : COLOR0; // diffuse lighting color
                 float4 vertex : SV_POSITION;
-                float4 worldPos : TEXCOORD0;
                 float3 V : TEXCOORD1;
                 float3 N : TEXCOORD2;
                 float3 T : TEXCOORD3;
             };
+            
+            float rand(in float2 uv)
+            {
+                float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
+                return abs(noise.x + noise.y) * 0.5;
+            }
+            
+            float3 polarTo3D (float theta, float phi)
+            {
+                float3 result = (0,0,0);
+                result.x = cos(theta) * cos(phi);
+                result.y = sin(theta) * cos(phi);
+                result.z = sin(phi);
+                return result;
+            }
 
             v2f vert (appdata_full v)
             {   
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz); // , unity_ObjectToWorld));
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex);
-                
-                o.V = normalize(_WorldSpaceCameraPos - o.worldPos.xyz);
+                o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz);   
+                o.V = normalize(_WorldSpaceCameraPos - o.vertex.xyz);
                 o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
                 return o;
             }
@@ -64,7 +80,14 @@
                 half3 B = cross(N, T);
                 float LN = dot(L, N);
                 
-                float thetaM = acos(2);
+                // Get coordinates of microsurface
+                float random1 = frac(rand(i.uv));
+                float random2 = frac(rand(i.vertex.xy));
+                float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
+                float phiM = 2 * PI * random2;
+                float3 M = polarTo3D(thetaM, phiM);
+                float MN = dot(M, N);
+                float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
 
                 float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
                 

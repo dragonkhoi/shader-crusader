@@ -47,7 +47,7 @@
 				o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz); // , unity_ObjectToWorld));
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex);
                 
-                o.V = normalize(_WorldSpaceCameraPos - o.worldPos.xyz);
+                o.V = normalize(_WorldSpaceCameraPos - o.vertex.xyz);
                 o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
                 return o;
             }
