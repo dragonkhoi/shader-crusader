@@ -2,7 +2,10 @@
 {
     Properties
     {
-        [NoScaleOffset] _MainTex ("Texture", 2D) = "white" {}
+		_Color("Diffuse Material Color", Color) = (1,1,1,1)
+	    _SpecularColor("Specular Material Color", Color) = (1,1,1,1)
+	    _Ax("Roughness in brush's direction on surface", Float) = 1.0
+	    _Ay("Roughness orthogonal to brush's direction on surface", Float) = 1.0
     }
     SubShader
     {
@@ -21,11 +24,15 @@
             #include "UnityLightingCommon.cginc" // for _LightColor0
             
             static const float PI = 3.14159265f;
-            
+			uniform float4 _Color;
+			uniform float4 _SpecularColor;
+			uniform float _Ax;
+			uniform float _Ay;
+
             struct v2f
             {
                 //float2 uv : TEXCOORD0;
-                fixed4 diff : COLOR0; // diffuse lighting color
+                //  fixed4 diff : COLOR0; // diffuse lighting color
                 float4 vertex : SV_POSITION;
                 float4 worldPos : TEXCOORD0;
                 float3 V : TEXCOORD1;
@@ -39,19 +46,17 @@
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 // o.uv = v.texcoord;
                 // get vertex normal in world space
-                half3 N = normalize (mul(v.normal, unity_WorldToObject));
+				o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz); // , unity_ObjectToWorld));
                 // dot product between normal and light direction for
                 // standard diffuse (Lambert) lighting
-                o.worldPos = mul(v.vertex, unity_ObjectToWorld);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex);
                 
-                half3 V = normalize(_WorldSpaceCameraPos - mul(v.vertex, unity_ObjectToWorld));
-                o.V = V;
-                o.N = N;
-                o.T = normalize(mul(v.tangent, unity_ObjectToWorld));
-                half nl = max (0, dot(N, _WorldSpaceLightPos0.xyz));
+                o.V = normalize(_WorldSpaceCameraPos - o.worldPos.xyz);
+                o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
+                // half nl = max (0, dot(N, _WorldSpaceLightPos0.xyz));
                 
                 // factor in the light color
-                o.diff = nl * _LightColor0;//  * wardSpec;
+                 // o.diff = nl * _LightColor0;//  * wardSpec;
                 //o.diff = _LightColor0 * wardSpec;
                 return o;
             }
@@ -60,24 +65,36 @@
 
             fixed4 frag (v2f i) : SV_Target
             {
-                half3 L = normalize(_WorldSpaceLightPos0 - i.worldPos);
+				half3 L = normalize(_WorldSpaceLightPos0.xyz); //  -i.worldPos);
                 half3 V = i.V;
+				half3 H = normalize(V + L);
                 half3 N = i.N;
-                half3 H = normalize(V + L);
                 half3 T = i.T;
                 half3 B = cross(N, T);
-                float ax = 1.0;
-                float ay = 1.0;
-                float ps = 1.0;
-                float kSpec = ps / (4 * PI * ax * ay);
-                float exponent = -2.0 * (pow((dot(H, T) / ax), 2) + pow(dot(H, B) / ay, 2)) /
-                                        (1.0f + dot(H, N));
+				float LN = dot(L, N);
+
+				float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
                 
-                fixed4 wardSpec = kSpec * 1.0f / (sqrt(dot(L, N) * dot(V, N))) * exp(exponent);
+				fixed3 wardSpec;
+				if (LN < 0.0) {
+					wardSpec = fixed3(0.0, 0.0, 0.0);
+				}
+				else {
+					float ps = 1.0;
+					float kSpec = ps / (4 * PI * _Ax * _Ay);
+					float dotHT = dot(H, T) / _Ax;
+					float dotHB = dot(H, B) / _Ay;
+					float exponent = -2.0 * (dotHT * dotHT + dotHB * dotHB) /
+						(1.0f + dot(H, N));
+					wardSpec = _LightColor0.rgb * _SpecularColor.rgb * sqrt(max(0.0, LN / dot(V, N))) * exp(exponent);
+				}
                 // sample texture
-                fixed4 col = wardSpec;//tex2D(_MainTex, i.uv);
+				float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN);
+
+				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
+
                 // multiply by lighting
-                col *= i.diff;
+                // col *= i.diff;
                 return col;
             }
             ENDCG
