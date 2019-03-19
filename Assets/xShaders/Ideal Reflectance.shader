@@ -58,6 +58,35 @@
                 return result;
             }
 
+            float shadowMasking (half3 v, half3 m, half3 n)
+            {
+                float G;
+                float dotVM = dot(v, m);
+                float dotVN = dot(v, n);
+                float chiPlus;
+                if (dotVM / dotVN > 0)
+                {
+                    chiPlus = 1.0;
+                }
+                else 
+                {
+                    chiPlus = 0.0;
+                }
+                float thetaV = 1.0;
+                float a = sqrt(0.5 * _AlphaP + 1)/tan(thetaV);
+                float piecewise;
+                if (a < 1.6){
+                    piecewise = (3.535 * a + 2.181 * a * a ) / (1 + 2.276*a + 2.577*a*a);
+                
+                }
+                else
+                {
+                    piecewise = 1.0;
+                }
+                G = chiPlus * piecewise;
+                return G;
+            }
+
             v2f vert (appdata_full v)
             {   
                 v2f o;
@@ -65,49 +94,55 @@
                 o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz);   
                 o.V = normalize(_WorldSpaceCameraPos - o.vertex.xyz);
                 o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
+                o.uv = v.texcoord;
                 return o;
             }
             
             sampler2D _MainTex;
 
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag (v2f input) : SV_Target
             {
-                half3 L = normalize(_WorldSpaceLightPos0.xyz); //  -i.worldPos);
-                half3 V = i.V;
-                half3 H = normalize(V + L);
-                half3 N = i.N;
-                half3 T = i.T;
-                half3 B = cross(N, T);
-                float LN = dot(L, N);
+                float Nt = 1.5;
+                float Ni = 1.5;
+                float3 i = normalize(_WorldSpaceLightPos0.xyz); // light dir
+                float m = normalize(input.N); // TODO: microsurface normal
+                float c = dot(i,m);
+                float g = sqrt(max(0.0,(Nt * Nt) / (Ni * Ni) - 1 + c*c));
+                float F;
+                if (g == 0.0)
+                {
+                    F = 1.0;
+                }
+                else {
+                    0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
+                }
+                half3 o = normalize(_WorldSpaceLightPos0.xyz); // light scattering TODO
+                float G = shadowMasking(i, m, input.N) * shadowMasking (o, m, input.N);
+                half3 n = normalize(input.N);
+                half3 ht = normalize(i + o); // TODO: check
                 
                 // Get coordinates of microsurface
-                float random1 = frac(rand(i.uv));
-                float random2 = frac(rand(i.vertex.xy));
+                float random1 = frac(rand(input.uv));
+                float random2 = frac(rand(input.vertex.xy));
                 float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
                 float phiM = 2 * PI * random2;
                 float3 M = polarTo3D(thetaM, phiM);
-                float MN = dot(M, N);
+                float MN = dot(M, n);
                 float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
-
-                float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
                 
-                fixed3 wardSpec;
-                if (LN < 0.0) {
-                    wardSpec = fixed3(0.0, 0.0, 0.0);
-                }
-                else {
-                    float ps = 1.0;
-                    float kSpec = ps / (4 * PI * _Ax * _Ay);
-                    float dotHT = dot(H, T) / _Ax;
-                    float dotHB = dot(H, B) / _Ay;
-                    float exponent = -2.0 * (dotHT * dotHT + dotHB * dotHB) /
-                        (1.0f + dot(H, N));
-                    wardSpec = _LightColor0.rgb * _SpecularColor.rgb * sqrt(max(0.0, LN / dot(V, N))) * exp(exponent);
-                }
+                
+                float freflection = F * G * D / (4*abs(dot(i, input.N))*abs(dot(o,input.N)));
+                float frefractionLead = (abs(dot(i, ht)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
+                float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
+                float bxdf = freflection + frefraction;
+                
+                half3 L = normalize(_WorldSpaceLightPos0.xyz);
+                float LN = dot(L, n);
+                
+          
+                float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
                 float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN);
-
-                fixed4 col = float4(ambientLight + wardSpec + diff, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
-
+                fixed4 col = float4(ambientLight + bxdf + diff, 1.0);
                 return col;
             }
             ENDCG
