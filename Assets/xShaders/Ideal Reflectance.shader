@@ -39,6 +39,35 @@
                 float3 N : TEXCOORD2;
                 float3 T : TEXCOORD3;
             };
+            
+            float shadowMasking (float v, float m)
+            {
+                float G;
+                float dotVM = dot(v, m);
+                float dotVN = dot(v, n);
+                float chiPlus;
+                if (dotVM / dotVN > 0)
+                {
+                    chiPlus = 1.0;
+                }
+                else 
+                {
+                    chiPlus = 0.0;
+                }
+                float alphaP = 1.0;
+                float thetaV = 1.0;
+                float a = sqrt(0.5 * alphaP + 1)/tan(thetaV);
+                float piecewise;
+                if (a < 1.6){
+                    piecewise = (3.535 * a + 2.181 * a * a ) / (1 + 2.276*a + 2.577*a*a);
+                
+                }
+                else
+                {
+                    piecewise = 1.0;
+                }
+                G = chiPlus * piecewise;
+            }
 
             v2f vert (appdata_full v)
             {   
@@ -54,8 +83,31 @@
             
             sampler2D _MainTex;
 
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag (v2f input) : SV_Target
             {
+                float Nt = 1.5;
+                float Ni = 1.5;
+                float3 i = normalize(_WorldSpaceLightPos0.xyz); // light dir
+                float m = normalize(input.N);
+                float c = dot(i,m);
+                float g = sqrt(max(0.0,(Nt * Nt) / (Ni * Ni) - 1 + c*c));
+                float F;
+                if (g == 0.0)
+                {
+                    F = 1.0;
+                }
+                else {
+                    0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
+                }
+                
+                float G = shadowMasking(i, m) * shadowMasking (o, m);
+                
+                float D = 1.0; // stefan here
+                float freflection = F * G * D / (4*length(dot(i, n))*length(dot(o,n)));
+                float frefractionLead = (length(dot(i, ht)) * length(dot(o, ht))) / (length(dot(i, n)) * length(dot(o, n)));
+                float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
+                float bxdf = freflection + frefraction;
+                
                 half3 L = normalize(_WorldSpaceLightPos0.xyz); //  -i.worldPos);
                 half3 V = i.V;
                 half3 H = normalize(V + L);
