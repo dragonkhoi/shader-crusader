@@ -21,8 +21,6 @@ Shader "Custom/Ideal Reflectance"
             // and color in _LightColor0
         
             CGPROGRAM
-            // Upgrade NOTE: excluded shader from DX11 because it uses wrong array syntax (type[size] name)
-            #pragma exclude_renderers d3d11
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
@@ -99,7 +97,12 @@ Shader "Custom/Ideal Reflectance"
                 float D = Beckmann(i.n, h);
                 float nl = max(dot(i.n, i.l), 0.0);
                 float nv = max(dot(i.n, i.v), 0.0);
-                float4 microfacetBRDF = F * G * D / (4.0 * nl * nv);
+                float4 microfacetBRDF;
+                // Don't divide by 0
+                if (4.0 * nl * nv == 0)
+                    microfacetBRDF = 0.0;
+                else
+                    microfacetBRDF = F * G * D / (4.0 * nl * nv);
                 
                 // Refraction
                 float thetaIn = acos(dot(i.l, h));
@@ -107,12 +110,13 @@ Shader "Custom/Ideal Reflectance"
                 //float o = (_Ni / _No) * i.l + ((_Ni / _No) * cos(thetaIn) - sqrt(1 - (sin(thetaOut) * sin(thetaOut)))) * i.n;
                 float3 o = refract(i.l, i.n, _Ni / _No);
                 float3 ht = -normalize(_Ni * i.l + _No * o);
-                float Ft = Fresnel(i.l, ht);
+                float Ft = min(Fresnel(i.l, ht), 1.0);
                 float Gt = Schlick(i.l, i.v, ht, i.n);
                 float Dt = Beckmann(i.n, ht);
                 float leadingTerm = abs(dot(i.l, ht)) * abs(dot(o, ht)) / (abs(dot(i.l, i.n)) * abs(dot(o, i.n)));
                 float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2);
                 
+                float nlClamp = max(dot(i.n, i.l), 0.0);
                 float3 spec = nl * (microfacetBRDF + microfacetBTDF) * _LightColor0;
                 
                 // Refraction of background texture
@@ -124,7 +128,6 @@ Shader "Custom/Ideal Reflectance"
                 refractCoords.y = 1.0 - refractCoords.y;
                 #endif
                 float3 refractColor = tex2D(_GrabTexture, refractCoords) * _Color * _LightColor0;
-                
                 return float4 (refractColor + spec, 1.0);
             }
             
