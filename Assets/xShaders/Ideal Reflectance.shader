@@ -49,6 +49,9 @@ Shader "Custom/Ideal Reflectance"
             float Beckmann (float3 n, float3 h)
             {
                 float nh = max (dot(n, h), 0.0);
+                // Don't divide by 0
+                if (nh == 0.0)
+                    return 0.0;
                 float exponent = (pow(nh, 2) - 1) / (_M * _M * pow(nh, 2));
                 return exp(exponent) / (PI * _M * _M * pow(nh, 4));
             }
@@ -114,7 +117,7 @@ Shader "Custom/Ideal Reflectance"
                 float Gt = Schlick(i.l, i.v, ht, i.n);
                 float Dt = Beckmann(i.n, ht);
                 float leadingTerm = abs(dot(i.l, ht)) * abs(dot(o, ht)) / (abs(dot(i.l, i.n)) * abs(dot(o, i.n)));
-                float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2);
+                float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2);             
                 
                 float nlClamp = max(dot(i.n, i.l), 0.0);
                 float3 spec = nl * (microfacetBRDF + microfacetBTDF) * _LightColor0;
