@@ -57,6 +57,15 @@
                 result.z = sin(phi);
                 return result;
             }
+            
+            float2 threeDToPolar (float3 v)
+            {
+                float2 result = (0,0);
+                float radius = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+                result.x = atan2(v.y, v.x);
+                result.y = acos(v.z / radius);
+                return result;
+            }
 
             float shadowMasking (half3 v, half3 m, half3 n)
             {
@@ -72,7 +81,7 @@
                 {
                     chiPlus = 0.0;
                 }
-                float thetaV = 1.0;
+                float thetaV = threeDToPolar(v).x;
                 float a = sqrt(0.5 * _AlphaP + 1)/tan(thetaV);
                 float piecewise;
                 if (a < 1.6){
@@ -104,24 +113,25 @@
             {
                 float Nt = 1.5;
                 float Ni = 1.5;
-                float3 i = normalize(_WorldSpaceLightPos0.xyz); // light dir
+                float3 i = normalize(WorldSpaceLightDir(input.vertex)); // light dir
                 // Get coordinates of microsurface
                 float random1 = frac(rand(input.uv));
                 float random2 = frac(rand(input.vertex.xy));
                 float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
                 float phiM = 2 * PI * random2;
                 float3 M = polarTo3D(thetaM, phiM); 
-                float c = dot(i,M);
+                float c = abs(dot(i,M));
                 float g = sqrt(max(0.0,(Nt * Nt) / (Ni * Ni) - 1 + c*c));
                 float F;
                 if (g == 0.0)
                     F = 1.0;
                 else
-                    0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
-                half3 o = normalize(_WorldSpaceLightPos0.xyz); // light scattering TODO
-                float G = shadowMasking(i, M, input.N) * shadowMasking (o, M, input.N);
+                    F = 0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
                 half3 n = normalize(input.N);
-                half3 ht = normalize(i + o); // TODO: check
+                half3 o = normalize(-i - 2 * dot(-i, n) * n); // light scattering TODO
+                float G = shadowMasking(i, M, input.N) * shadowMasking (o, M, input.N);
+                half3 hr = normalize(i + o); // TODO: check
+                half3 ht = normalize (-Ni * i - Nt * o);
                 
                 float MN = dot(M, n);
                 float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
@@ -129,9 +139,9 @@
                 
                 
                 float freflection = F * G * D / (4*abs(dot(i, input.N))*abs(dot(o,input.N)));
-                float frefractionLead = (abs(dot(i, ht)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
+                float frefractionLead = (abs(dot(i, hr)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
                 float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
-                float bxdf = freflection; //+ frefraction;
+                float bxdf = freflection + frefraction;
                 
                 half3 L = normalize(_WorldSpaceLightPos0.xyz);
                 float LN = dot(L, n);
