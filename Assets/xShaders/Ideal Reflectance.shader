@@ -1,26 +1,28 @@
-﻿Shader "Custom/Ideal Reflectance"
+Shader "Custom/Ideal Reflectance"
 {
     Properties
     {
         _Color("Diffuse Material Color", Color) = (1,1,1,1)
         _SpecularColor("Specular Material Color", Color) = (1,1,1,1)
-        _Ax("Roughness in brush's direction on surface", Float) = 1.0
-        _Ay("Roughness orthogonal to brush's direction on surface", Float) = 1.0
-        _AlphaP("Exponent parameter for calculating microsurface normal", Float) = 1.0
+        _M("Roughness", Float) = 0.5
+        _Ni("Refractive Index In", Float) = 1.0
+        _No("Refractive Index Out", Float) = 1.5     
     }
     SubShader
     {
+        Tags {"Queue"="Transparent" "RenderType"="Transparent"}
+        GrabPass{}
+        
         Pass
         {
             // indicate that our pass is the "base" pass in forward
             // rendering pipeline. It gets ambient and main directional
             // light data set up; light direction in _WorldSpaceLightPos0
             // and color in _LightColor0
-            Tags {"LightMode"="ForwardBase"}
         
             CGPROGRAM
-// Upgrade NOTE: excluded shader from DX11 because it uses wrong array syntax (type[size] name)
-#pragma exclude_renderers d3d11
+            // Upgrade NOTE: excluded shader from DX11 because it uses wrong array syntax (type[size] name)
+            #pragma exclude_renderers d3d11
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
@@ -29,144 +31,103 @@
             static const float PI = 3.14159265f;
             uniform float4 _Color;
             uniform float4 _SpecularColor;
-            uniform float _Ax;
-            uniform float _Ay;
-            uniform float _AlphaP;
+            uniform float _M;
+            uniform float _Ni;
+            uniform float _No;
+            sampler2D _GrabTexture;
+            
+            /* Schlick approximation
+             * l = Light direction
+             * h = Half vector between light and viewer */
+            float Fresnel(float3 l, float3 h)
+            {
+                float f0 = pow((1.0 - _No) / (1.0 + _No), 2);
+                return f0 + (1.0 - f0) * pow(1.0 - dot(l, h), 5);
+            }
+            
+            /* Beckmann distribution
+             * n = Macro surface normal
+             * h = Half vector between light and viewer */
+            float Beckmann (float3 n, float3 h)
+            {
+                float nh = max (dot(n, h), 0.0);
+                float exponent = (pow(nh, 2) - 1) / (_M * _M * pow(nh, 2));
+                return exp(exponent) / (PI * _M * _M * pow(nh, 4));
+            }
+            
+            /* Schlick approximation shadow masking
+             * l = Light direction
+             * v = Viewer vector
+             * h = Half vector between light and viewer
+             * n = Macro surface normal */
+            float Schlick (float3 l, float3 v, float3 h, float3 n)
+            {
+                float nl = max (dot(n, l), 0.0);
+                float nv = max (dot(n, v), 0.0);
+                float k = _M * sqrt(2.0 / PI);
+                float G1l = nl / (nl * (1 - k) + k);
+                float G1v = nv / (nv * (1 - k) + k);
+                return G1l * G1v;
+            }
             
             struct v2f
             {
-                float2 uv : TEXCOORD0;
-                //  fixed4 diff : COLOR0; // diffuse lighting color
                 float4 vertex : SV_POSITION;
-                float3 V : TEXCOORD1;
-                float3 N : TEXCOORD2;
-                float3 T : TEXCOORD3;
+                float3 v : TEXCOORD0;
+                float3 n : TEXCOORD1;
+                float3 l : TEXCOORD2;
             };
             
-            float rand(in float2 uv)
-            {
-                float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
-                return abs(noise.x + noise.y) * 0.5;
-            }
-            
-            float3 polarTo3D (float theta, float phi)
-            {
-                float3 result = (0,0,0);
-                result.x = cos(theta) * cos(phi);
-                result.y = sin(theta) * cos(phi);
-                result.z = sin(phi);
-                return result;
-            }
-            
-            float2 threeDToPolar (float3 v)
-            {
-                float2 result = (0,0);
-                float radius = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-                result.x = atan2(v.y, v.x);
-                result.y = acos(v.z / radius);
-                return result;
-            }
-
-            float shadowMasking (half3 v, half3 m, half3 n)
-            {
-                float G;
-                float dotVM = dot(v, m);
-                float dotVN = dot(v, n);
-                float chiPlus;
-                if (dotVM / dotVN > 0)
-                {
-                    chiPlus = 1.0;
-                }
-                else 
-                {
-                    chiPlus = 0.0;
-                }
-                float thetaV = threeDToPolar(v).x;
-                float a = sqrt(0.5 * _AlphaP + 1)/tan(thetaV);
-                float piecewise;
-                if (a < 1.6){
-                    piecewise = (3.535 * a + 2.181 * a * a ) / (1 + 2.276*a + 2.577*a*a);
-                
-                }
-                else
-                {
-                    piecewise = 1.0;
-                }
-                G = chiPlus * piecewise;
-                return G;
-            }
-
+            // Vertex shader
             v2f vert (appdata_full v)
             {   
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz);   
-                o.V = normalize(_WorldSpaceCameraPos - o.vertex.xyz);
-                o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
-                o.uv = v.texcoord;
+                o.n = normalize(UnityObjectToWorldNormal(v.normal));   
+                o.v = normalize(WorldSpaceViewDir(o.vertex));
+                o.l = normalize(WorldSpaceLightDir(o.vertex)); 
                 return o;
             }
             
-            sampler2D _MainTex;
+            // Fragment shader
+            fixed4 frag (v2f i) : SV_Target
+            {
+                // Reflection
+                float3 h = normalize(i.l + i.v);
+                float F = Fresnel(i.l, h);
+                float G = Schlick(i.l, i.v, h, i.n);
+                float D = Beckmann(i.n, h);
+                float nl = max(dot(i.n, i.l), 0.0);
+                float nv = max(dot(i.n, i.v), 0.0);
+                float4 microfacetBRDF = F * G * D / (4.0 * nl * nv);
+                
+                // Refraction
+                float thetaIn = acos(dot(i.l, h));
+                float thetaOut = asin(_Ni * sin(thetaIn) / _No);
+                //float o = (_Ni / _No) * i.l + ((_Ni / _No) * cos(thetaIn) - sqrt(1 - (sin(thetaOut) * sin(thetaOut)))) * i.n;
+                float3 o = refract(i.l, i.n, _Ni / _No);
+                float3 ht = -normalize(_Ni * i.l + _No * o);
+                float Ft = Fresnel(i.l, ht);
+                float Gt = Schlick(i.l, i.v, ht, i.n);
+                float Dt = Beckmann(i.n, ht);
+                float leadingTerm = abs(dot(i.l, ht)) * abs(dot(o, ht)) / (abs(dot(i.l, i.n)) * abs(dot(o, i.n)));
+                float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2);
+                
+                float3 spec = nl * (microfacetBRDF + microfacetBTDF) * _LightColor0;
+                
+                // Refraction of background texture
+                float3 refractDir = normalize(refract(i.v, i.n, _Ni / _No));
+                float4 refractPos = ComputeGrabScreenPos(UnityObjectToClipPos(refractDir));
+                float2 refractCoords = (refractPos.xy / refractPos.w);
+                #if UNITY_UV_STARTS_AT_TOP
+                refractCoords.x = 1.0 - refractCoords.x;
+                refractCoords.y = 1.0 - refractCoords.y;
+                #endif
+                float3 refractColor = tex2D(_GrabTexture, refractCoords) * _Color * _LightColor0;
+                
+                return float4 (refractColor + spec, 1.0);
+            }
             
-            float fresnel(half3 i, half3 m, float Nt, float Ni)
-            {
-                float c = abs(dot(i,m));
-                float g = sqrt(max(0.0,(Nt * Nt) / (Ni * Ni) - 1 + c*c));
-                float F;
-                if (g == 0.0)
-                    F = 1.0;
-                else
-                    F = 0.5 * ( (g - c) * (g - c) ) / ( (g + c) * (g + c) ) * ( 1 + pow((c*(g+c) - 1), 2)/pow((c*(g-c) + 1), 2));
-                    
-                return F;
-            }
-
-            fixed4 frag (v2f input) : SV_Target
-            {
-                float Nt = 1.5;
-                float Ni = 1.5;
-                float3 i = normalize(WorldSpaceLightDir(input.vertex)); // light dir
-                // Get coordinates of microsurface
-                float random1 = frac(rand(input.uv));
-                float random2 = frac(rand(input.vertex.xy));
-                float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
-                float phiM = 2 * PI * random2;
-
-                float3 M = polarTo3D(thetaM, phiM); 
-                
-                
-                
-                half3 n = normalize(input.N);
-                half3 o = normalize(-i - 2 * dot(-i, n) * n); // light scattering TODO
-                half3 hr = normalize(i + o); // TODO: check
-                half3 ht = normalize (-Ni * i - Nt * o);
-                
-                float Greflect = shadowMasking(i, hr, n) * shadowMasking (o, hr, n);
-                float Grefract = shadowMasking(i, ht, n) * shadowMasking(o, ht, n);
-                              
-                float Freflect = fresnel(i, hr, Nt, Ni);
-                float Frefract = fresnel(i, ht, Nt, Ni);
-                
-                float MN = dot(M, n);
-                float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
-               
-                
-                
-                float freflection = Freflect * Greflect * D / (4*abs(dot(i, n))*abs(dot(o,n)));
-                float frefractionLead = (abs(dot(i, ht)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
-                float frefraction = frefractionLead * (Nt * Nt * (1 - Frefract) * Grefract * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
-                float bxdf = freflection + frefraction;
-                
-                half3 L = normalize(_WorldSpaceLightPos0.xyz);
-                float LN = dot(L, n);
-                
-          
-                float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
-                float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN);
-                fixed4 col = float4(ambientLight + bxdf + diff, 1.0);
-                return col;
-            }
             ENDCG
         }
     }

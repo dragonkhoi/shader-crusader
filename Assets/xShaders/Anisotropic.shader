@@ -94,7 +94,7 @@
                 fixed shadow = SHADOW_ATTENUATION(i);
 				float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN) * shadow;
 
-				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
+				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0);
 
                 return col;
             }
