@@ -1,4 +1,4 @@
-﻿Shader "Custom/Anisotropic"
+﻿Shader "Custom/Ideal Reflectance"
 {
     Properties
     {
@@ -142,7 +142,7 @@
                 half3 hr = normalize(i + o); // TODO: check
                 half3 ht = normalize (-Ni * i - Nt * o);
                 
-                float Greflect = shadowMasking(i, ht, n) * shadowMasking (o, ht, n);
+                float Greflect = shadowMasking(i, hr, n) * shadowMasking (o, hr, n);
                 float Grefract = shadowMasking(i, ht, n) * shadowMasking(o, ht, n);
                               
                 float Freflect = fresnel(i, hr, Nt, Ni);

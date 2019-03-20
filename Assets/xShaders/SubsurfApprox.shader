@@ -1,11 +1,11 @@
-﻿Shader "Custom/Anisotropic"
+﻿Shader "Custom/Subsurf"
 {
     Properties
     {
-		_Color("Diffuse Material Color", Color) = (1,1,1,1)
-	    _SpecularColor("Specular Material Color", Color) = (1,1,1,1)
-	    _Ax("Roughness in brush's direction on surface", Float) = 1.0
-	    _Ay("Roughness orthogonal to brush's direction on surface", Float) = 1.0
+		_MainTex ("Albedo (RGB)", 2D) = "white" {}
+	    _Power("Power", Range(0.0, 4.0)) = 1.0
+        _Distortion("Distortion", Range(0.0, 1.0)) = 1.0
+        _Scale("Scale", Range(0.0, 1.0)) = 1.0
     }
     SubShader
     {
@@ -31,14 +31,13 @@
             #include "AutoLight.cginc"
             
             static const float PI = 3.14159265f;
-			uniform float4 _Color;
-			uniform float4 _SpecularColor;
-			uniform float _Ax;
-			uniform float _Ay;
+			float _Power;
+            float _Distortion;
+            float _Scale;
 
             struct v2f
             {
-                //float2 uv : TEXCOORD0;
+                float2 uv : TEXCOORD5;
                 //  fixed4 diff : COLOR0; // diffuse lighting color
                 float4 pos : SV_POSITION;
                 float4 worldPos : TEXCOORD0;
@@ -52,6 +51,7 @@
             v2f vert (appdata_full v)
             {   
                 v2f o;
+                o.uv = v.texcoord;
                 o.pos = UnityObjectToClipPos(v.vertex);
 				o.N = normalize(mul(float4(v.normal, 0.0), unity_WorldToObject).xyz); // , unity_ObjectToWorld));
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex);
@@ -68,33 +68,24 @@
 
             fixed4 frag (v2f i) : SV_Target
             {
-				half3 L = normalize(_WorldSpaceLightPos0.xyz); //  -i.worldPos);
+				half3 L = -1*normalize(WorldSpaceLightDir(i.pos)); //  -i.worldPos);
                 half3 V = i.V;
-				half3 H = normalize(V + L);
                 half3 N = i.N;
-                half3 T = i.T;
-                half3 B = cross(N, T);
-				float LN = dot(L, N);
-
-				float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
+				half3 H = normalize(N * _Distortion + L);
                 
-				fixed3 wardSpec;
-				if (LN < 0.0) {
-					wardSpec = fixed3(0.0, 0.0, 0.0);
-				}
-				else {
-					float ps = 1.0;
-					float kSpec = ps / (4 * PI * _Ax * _Ay);
-					float dotHT = dot(H, T) / _Ax;
-					float dotHB = dot(H, B) / _Ay;
-					float exponent = -2.0 * (dotHT * dotHT + dotHB * dotHB) /
-						(1.0f + dot(H, N));
-					wardSpec = _LightColor0.rgb * _SpecularColor.rgb * sqrt(max(0.0, LN / dot(V, N))) * exp(exponent);
-				}
-                fixed shadow = SHADOW_ATTENUATION(i);
-				float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN) * shadow;
+                float iBack = pow(saturate(dot(V, -H)), _Power) * _Scale;
+                
+                fixed4 texColor = tex2D(_MainTex, i.uv);
+				
+                float LN = dot(L, N);
 
-				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
+				float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * texColor.rgb;
+                
+				fixed3 wardSpec = iBack * _LightColor0.rgb;
+                // fixed shadow = SHADOW_ATTENUATION(i);
+				// float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN) * shadow;
+
+				fixed4 col = float4(ambientLight + texColor * _LightColor0.rgb * wardSpec, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
 
                 return col;
             }
