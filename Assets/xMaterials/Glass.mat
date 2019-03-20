@@ -75,13 +75,13 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _M: 0.55
+    - _M: 0.34
     - _Magnitude: 0.05
     - _Metallic: 0
     - _Mode: 0
     - _N: 7
-    - _Ni: 1
-    - _No: 1.55
+    - _Ni: 0.37
+    - _No: 0.54
     - _Nt: 1
     - _OcclusionStrength: 1
     - _Parallax: 0.02
