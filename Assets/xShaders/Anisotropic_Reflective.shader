@@ -1,4 +1,4 @@
-﻿Shader "Custom/Anisotropic"
+﻿Shader "Custom/AnisotropicReflective"
 {
     Properties
     {
@@ -45,6 +45,7 @@
                 float3 V : TEXCOORD1;
                 float3 N : TEXCOORD2;
                 float3 T : TEXCOORD3;
+                half3 worldRefl : TEXCOORD5;
                 fixed3 ambient : COLOR1;
                 SHADOW_COORDS(4)
             };
@@ -59,6 +60,7 @@
                 o.V = normalize(_WorldSpaceCameraPos - o.pos.xyz);
                 o.T = normalize(mul(unity_ObjectToWorld, float4(v.tangent.xyz, 0.0)).xyz);
                  o.ambient = ShadeSH9(half4(o.N,1));
+                 o.worldRefl = reflect(-o.V, o.N);
                 // compute shadows data
                 TRANSFER_SHADOW(o)
                 return o;
@@ -93,8 +95,11 @@
 				}
                 fixed shadow = SHADOW_ATTENUATION(i);
 				float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN) * shadow;
-
-				fixed4 col = float4(ambientLight + wardSpec + diff, 1.0);
+                // sample the default reflection cubemap, using the reflection vector
+                half4 skyData = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, i.worldRefl, _Ax*_Ay);
+                // decode cubemap data into actual color
+                half3 skyColor = DecodeHDR (skyData, unity_SpecCube0_HDR);
+				fixed4 col = float4(ambientLight + wardSpec * skyColor + diff * skyColor, 1.0); // float4(1.0,1.0,1.0,1.0); // //tex2D(_MainTex, i.uv);
 
                 return col;
             }
