@@ -121,19 +121,26 @@
                     
                 return F;
             }
+            
+            float microSurfaceSampling (half3 m)
+            {
+                // Get coordinates of microsurface
+                //float random1 = frac(rand(input.uv));
+                //float random2 = frac(rand(input.vertex.xy));
+                //float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
+                //float phiM = 2 * PI * random2;
+                //float3 M = polarTo3D(thetaM, phiM);
+                float mn = dot(m, n);
+                float thetaM = acos(mn / (length(m) * length(n)));
+                float D = (mn > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
+                return D;
+            }
 
             fixed4 frag (v2f input) : SV_Target
             {
                 float Nt = 1.5;
                 float Ni = 1.5;
                 float3 i = normalize(WorldSpaceLightDir(input.vertex)); // light dir
-                // Get coordinates of microsurface
-                float random1 = frac(rand(input.uv));
-                float random2 = frac(rand(input.vertex.xy));
-                float thetaM = acos(pow(random1, 1 / (_AlphaP + 2)));
-                float phiM = 2 * PI * random2;
-
-                float3 M = polarTo3D(thetaM, phiM); 
                 
                 
                 
@@ -144,12 +151,8 @@
                 half3 ht = normalize (-Ni * i - Nt * o);
                 
                 float F = fresnel(i, hr, Nt, Ni);
-                
-                float MN = dot(M, n);
-                float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
-               
-                
-                
+                float D = microSurfaceSampling (hr);
+              
                 float freflection = F * G * D / (4*abs(dot(i, n))*abs(dot(o,n)));
                 float frefractionLead = (abs(dot(i, hr)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
                 float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
@@ -160,8 +163,8 @@
                 
           
                 float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
-                float3 diff = float3(_Color.rgb) * float3(_LightColor0.rgb) * max(0.0, LN);
-                fixed4 col = float4(ambientLight + bxdf + diff, 1.0);
+                float3 diff = (float3(_Color.rgb) * float3(_LightColor0.rgb) + bxdf) * max(0.0, LN) ;
+                fixed4 col = float4(ambientLight + diff, 1.0);
                 return col;
             }
             ENDCG
