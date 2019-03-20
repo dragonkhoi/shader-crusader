@@ -108,8 +108,8 @@ Shader "Custom/Ideal Reflectance"
                     microfacetBRDF = F * G * D / (4.0 * nl * nv);
                 
                 // Refraction
-                float thetaIn = acos(dot(i.l, h));
-                float thetaOut = asin(_Ni * sin(thetaIn) / _No);
+                //float thetaIn = acos(dot(i.l, h));
+                //float thetaOut = asin(_Ni * sin(thetaIn) / _No);
                 //float o = (_Ni / _No) * i.l + ((_Ni / _No) * cos(thetaIn) - sqrt(1 - (sin(thetaOut) * sin(thetaOut)))) * i.n;
                 float3 o = refract(i.l, i.n, _Ni / _No);
                 float3 ht = -normalize(_Ni * i.l + _No * o);
