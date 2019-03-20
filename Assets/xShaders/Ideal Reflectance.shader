@@ -124,7 +124,7 @@ Shader "Custom/Ideal Reflectance"
                 refractCoords.x = 1.0 - refractCoords.x;
                 refractCoords.y = 1.0 - refractCoords.y;
                 #endif
-                float3 refractColor = tex2D(_GrabTexture, refractCoords);
+                float3 refractColor = tex2D(_GrabTexture, refractCoords) * _Color;
                 
                 return float4 (refractColor + spec, 1.0);
                 //return tex2Dproj(_GrabTexture, i.grabPos) + float4(spec, 1.0);
