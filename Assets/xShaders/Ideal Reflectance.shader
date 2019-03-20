@@ -76,7 +76,6 @@ Shader "Custom/Ideal Reflectance"
                 float3 v : TEXCOORD0;
                 float3 n : TEXCOORD1;
                 float3 l : TEXCOORD2;
-                float4 grabPos : TEXCOORD3;
             };
             
             // Vertex shader
@@ -87,7 +86,6 @@ Shader "Custom/Ideal Reflectance"
                 o.n = normalize(UnityObjectToWorldNormal(v.normal));   
                 o.v = normalize(WorldSpaceViewDir(o.vertex));
                 o.l = normalize(WorldSpaceLightDir(o.vertex)); 
-                o.grabPos = ComputeGrabScreenPos(o.vertex);
                 return o;
             }
             
@@ -119,9 +117,17 @@ Shader "Custom/Ideal Reflectance"
                 float3 diff = nl * _Color * _LightColor0;
                 
                 // Refraction of background texture
-                float3 refractColor = tex2Dproj(_GrabTexture, float4(o, 1.0));
+                float3 refractDir = normalize(refract(i.v, i.n, _Ni / _No));
+                float4 refractPos = ComputeGrabScreenPos(UnityObjectToClipPos(refractDir));
+                float2 refractCoords = (refractPos.xy / refractPos.w);
+                #if UNITY_UV_STARTS_AT_TOP
+                refractCoords.x = 1.0 - refractCoords.x;
+                refractCoords.y = 1.0 - refractCoords.y;
+                #endif
+                float3 refractColor = tex2D(_GrabTexture, refractCoords);
+                
                 return float4 (refractColor + spec, 1.0);
-                //return tex2Dproj(_GrabTexture, refractv) + float4(spec, 1.0);
+                //return tex2Dproj(_GrabTexture, i.grabPos) + float4(spec, 1.0);
             }
             
             ENDCG
