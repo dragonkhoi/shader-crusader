@@ -99,7 +99,7 @@ Shader "Custom/Ideal Reflectance"
                 float D = Beckmann(i.n, h);
                 float nl = max(dot(i.n, i.l), 0.0);
                 float nv = max(dot(i.n, i.v), 0.0);
-                float4 microfacetBRDF = F * G * D / (4 * nl * nv);
+                float4 microfacetBRDF = F * G * D / (4.0 * nl * nv);
                 
                 // Refraction
                 float thetaIn = acos(dot(i.l, h));
@@ -110,11 +110,10 @@ Shader "Custom/Ideal Reflectance"
                 float Ft = Fresnel(i.l, ht);
                 float Gt = Schlick(i.l, i.v, ht, i.n);
                 float Dt = Beckmann(i.n, ht);
-                float leadingTerm = abs(dot(i.l, ht)) * abs(dot(o, ht)) / (abs(dot(i.l, i.n)) * abs(dot(o, i.n))); // TODO: Clamping?
-                float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2); // TODO: Clamping?
+                float leadingTerm = abs(dot(i.l, ht)) * abs(dot(o, ht)) / (abs(dot(i.l, i.n)) * abs(dot(o, i.n)));
+                float microfacetBTDF = leadingTerm * _No * _No * (1.0 - Ft) * Gt * Dt / pow(_Ni * dot(i.l, ht) + _No * dot(o, ht), 2);
                 
                 float3 spec = nl * (microfacetBRDF + microfacetBTDF) * _LightColor0;
-                float3 diff = nl * _Color * _LightColor0;
                 
                 // Refraction of background texture
                 float3 refractDir = normalize(refract(i.v, i.n, _Ni / _No));
@@ -124,10 +123,9 @@ Shader "Custom/Ideal Reflectance"
                 refractCoords.x = 1.0 - refractCoords.x;
                 refractCoords.y = 1.0 - refractCoords.y;
                 #endif
-                float3 refractColor = tex2D(_GrabTexture, refractCoords) * _Color;
+                float3 refractColor = tex2D(_GrabTexture, refractCoords) * _Color * _LightColor0;
                 
                 return float4 (refractColor + spec, 1.0);
-                //return tex2Dproj(_GrabTexture, i.grabPos) + float4(spec, 1.0);
             }
             
             ENDCG
