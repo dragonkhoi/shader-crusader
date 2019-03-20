@@ -1,11 +1,9 @@
-﻿Shader "Custom/Anisotropic"
+﻿Shader "Custom/IdealReflectance"
 {
     Properties
     {
         _Color("Diffuse Material Color", Color) = (1,1,1,1)
         _SpecularColor("Specular Material Color", Color) = (1,1,1,1)
-        _Ax("Roughness in brush's direction on surface", Float) = 1.0
-        _Ay("Roughness orthogonal to brush's direction on surface", Float) = 1.0
         _AlphaP("Exponent parameter for calculating microsurface normal", Float) = 1.0
     }
     SubShader
@@ -29,8 +27,6 @@
             static const float PI = 3.14159265f;
             uniform float4 _Color;
             uniform float4 _SpecularColor;
-            uniform float _Ax;
-            uniform float _Ay;
             uniform float _AlphaP;
             
             struct v2f
@@ -122,7 +118,7 @@
                 return F;
             }
             
-            float microSurfaceSampling (half3 m)
+            float microSurfaceSampling (half3 m, half3 n)
             {
                 // Get coordinates of microsurface
                 //float random1 = frac(rand(input.uv));
@@ -145,17 +141,22 @@
                 
                 
                 half3 n = normalize(input.N);
-                half3 o = normalize(-i - 2 * dot(-i, n) * n); // light scattering TODO
-                float G = shadowMasking(i, M, input.N) * shadowMasking (o, M, input.N);
-                half3 hr = normalize(i + o); // TODO: check
+                half3 o = normalize(2*abs(dot(i, n)) * n - i);
+                half3 hr = normalize(i + o);
                 half3 ht = normalize (-Ni * i - Nt * o);
                 
-                float F = fresnel(i, hr, Nt, Ni);
-                float D = microSurfaceSampling (hr);
-              
-                float freflection = F * G * D / (4*abs(dot(i, n))*abs(dot(o,n)));
-                float frefractionLead = (abs(dot(i, hr)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
-                float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
+                float Greflect = shadowMasking(i, ht, n) * shadowMasking (o, ht, n);
+                float Grefract = shadowMasking(i, ht, n) * shadowMasking(o, ht, n);
+                              
+                float Freflect = fresnel(i, hr, Nt, Ni);
+                float Frefract = fresnel(i, ht, Nt, Ni);
+                float Dreflect = microSurfaceSampling(hr, n);
+                float Drefract = microSurfaceSampling(ht, n);
+                
+                float freflection = Freflect * Greflect * Dreflect / (4*abs(dot(i, n))*abs(dot(o,n)));
+                float frefractionLead = (abs(dot(i, ht)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
+                float frefraction = frefractionLead * (Nt * Nt * (1 - Frefract) * Grefract * Drefract) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
+
                 float bxdf = freflection + frefraction;
                 
                 half3 L = normalize(_WorldSpaceLightPos0.xyz);
@@ -163,7 +164,7 @@
                 
           
                 float3 ambientLight = UNITY_LIGHTMODEL_AMBIENT.rgb * _Color.rgb;
-                float3 diff = (float3(_Color.rgb) * float3(_LightColor0.rgb) + bxdf) * max(0.0, LN) ;
+                float3 diff = (_Color.rgb * _LightColor0.rgb + bxdf * _SpecularColor.rgb * _LightColor0.rgb) * max(0.0, LN) ;
                 fixed4 col = float4(ambientLight + diff, 1.0);
                 return col;
             }
