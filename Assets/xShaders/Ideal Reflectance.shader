@@ -139,20 +139,23 @@
                 
                 half3 n = normalize(input.N);
                 half3 o = normalize(-i - 2 * dot(-i, n) * n); // light scattering TODO
-                float G = shadowMasking(i, M, input.N) * shadowMasking (o, M, input.N);
                 half3 hr = normalize(i + o); // TODO: check
                 half3 ht = normalize (-Ni * i - Nt * o);
                 
-                float F = fresnel(i, hr, Nt, Ni);
+                float Greflect = shadowMasking(i, ht, n) * shadowMasking (o, ht, n);
+                float Grefract = shadowMasking(i, ht, n) * shadowMasking(o, ht, n);
+                              
+                float Freflect = fresnel(i, hr, Nt, Ni);
+                float Frefract = fresnel(i, ht, Nt, Ni);
                 
                 float MN = dot(M, n);
                 float D = (MN > 0 ? 1 : 0) * (_AlphaP + 2) / (2 * PI) * pow(cos(thetaM), _AlphaP);
                
                 
                 
-                float freflection = F * G * D / (4*abs(dot(i, n))*abs(dot(o,n)));
-                float frefractionLead = (abs(dot(i, hr)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
-                float frefraction = frefractionLead * (Nt * Nt * (1 - F) * G * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
+                float freflection = Freflect * Greflect * D / (4*abs(dot(i, n))*abs(dot(o,n)));
+                float frefractionLead = (abs(dot(i, ht)) * abs(dot(o, ht))) / (abs(dot(i, n)) * abs(dot(o, n)));
+                float frefraction = frefractionLead * (Nt * Nt * (1 - Frefract) * Grefract * D) / pow((Ni*(dot(i, ht)) + Nt*dot(o,ht)), 2);
                 float bxdf = freflection + frefraction;
                 
                 half3 L = normalize(_WorldSpaceLightPos0.xyz);
